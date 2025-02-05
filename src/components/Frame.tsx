@@ -6,141 +6,100 @@ import sdk, {
   SignIn as SignInCore,
   type Context,
 } from "@farcaster/frame-sdk";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "~/components/ui/card";
-
-import { config } from "~/components/providers/WagmiProvider";
-import { truncateAddress } from "~/lib/truncateAddress";
-import { base, optimism } from "wagmi/chains";
-import { useSession } from "next-auth/react";
-import { createStore } from "mipd";
-import { Label } from "~/components/ui/label";
-import { PROJECT_TITLE } from "~/lib/constants";
-
-function ExampleCard() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Welcome to the Frame Template</CardTitle>
-        <CardDescription>
-          This is an example card that you can customize or remove
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Label>Place content in a Card here.</Label>
-      </CardContent>
-    </Card>
-  );
-}
+import { PROJECT_TITLE, MAX_NUMBER, TARGET_NUMBER } from "~/lib/constants";
 
 export default function Frame() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<Context.FrameContext>();
-
+  const [number, setNumber] = useState(1);
+  const [isCounting, setIsCounting] = useState(true);
+  const [hasWon, setHasWon] = useState(false);
+  const [showResult, setShowResult] = useState(false);
   const [added, setAdded] = useState(false);
 
-  const [addFrameResult, setAddFrameResult] = useState("");
-
-  const addFrame = useCallback(async () => {
-    try {
-      await sdk.actions.addFrame();
-    } catch (error) {
-      if (error instanceof AddFrame.RejectedByUser) {
-        setAddFrameResult(`Not added: ${error.message}`);
-      }
-
-      if (error instanceof AddFrame.InvalidDomainManifest) {
-        setAddFrameResult(`Not added: ${error.message}`);
-      }
-
-      setAddFrameResult(`Error: ${error}`);
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isCounting && number < MAX_NUMBER) {
+      interval = setInterval(() => {
+        setNumber(prev => prev + 1);
+      }, 100);
     }
-  }, []);
+    return () => clearInterval(interval);
+  }, [isCounting, number]);
+
+  const handleTap = useCallback(() => {
+    if (isCounting) {
+      setIsCounting(false);
+      setShowResult(true);
+      
+      if (number === TARGET_NUMBER) {
+        setHasWon(true);
+      }
+
+      setTimeout(() => {
+        setNumber(1);
+        setIsCounting(true);
+        setShowResult(false);
+        setHasWon(false);
+      }, 5000);
+    }
+  }, [isCounting, number]);
 
   useEffect(() => {
     const load = async () => {
       const context = await sdk.context;
-      if (!context) {
-        return;
+      if (context) {
+        setContext(context);
+        setAdded(context.client.added);
       }
-
-      setContext(context);
-      setAdded(context.client.added);
-
-      // If frame isn't already added, prompt user to add it
-      if (!context.client.added) {
-        addFrame();
-      }
-
-      sdk.on("frameAdded", ({ notificationDetails }) => {
-        setAdded(true);
-      });
-
-      sdk.on("frameAddRejected", ({ reason }) => {
-        console.log("frameAddRejected", reason);
-      });
-
-      sdk.on("frameRemoved", () => {
-        console.log("frameRemoved");
-        setAdded(false);
-      });
-
-      sdk.on("notificationsEnabled", ({ notificationDetails }) => {
-        console.log("notificationsEnabled", notificationDetails);
-      });
-      sdk.on("notificationsDisabled", () => {
-        console.log("notificationsDisabled");
-      });
-
-      sdk.on("primaryButtonClicked", () => {
-        console.log("primaryButtonClicked");
-      });
-
-      console.log("Calling ready");
       sdk.actions.ready({});
-
-      // Set up a MIPD Store, and request Providers.
-      const store = createStore();
-
-      // Subscribe to the MIPD Store.
-      store.subscribe((providerDetails) => {
-        console.log("PROVIDER DETAILS", providerDetails);
-        // => [EIP6963ProviderDetail, EIP6963ProviderDetail, ...]
-      });
-    };
-    if (sdk && !isSDKLoaded) {
-      console.log("Calling load");
       setIsSDKLoaded(true);
+    };
+    
+    if (!isSDKLoaded) {
       load();
-      return () => {
-        sdk.removeAllListeners();
-      };
     }
-  }, [isSDKLoaded, addFrame]);
+    
+    return () => {
+      sdk.removeAllListeners();
+    };
+  }, [isSDKLoaded]);
 
   if (!isSDKLoaded) {
     return <div>Loading...</div>;
   }
 
   return (
-    <div
-      style={{
-        paddingTop: context?.client.safeAreaInsets?.top ?? 0,
-        paddingBottom: context?.client.safeAreaInsets?.bottom ?? 0,
-        paddingLeft: context?.client.safeAreaInsets?.left ?? 0,
-        paddingRight: context?.client.safeAreaInsets?.right ?? 0,
-      }}
-    >
-      <div className="w-[300px] mx-auto py-2 px-2">
-        <h1 className="text-2xl font-bold text-center mb-4 text-neutral-900">
-          {PROJECT_TITLE}
-        </h1>
-        <ExampleCard />
+    <div style={{
+      paddingTop: context?.client.safeAreaInsets?.top ?? 0,
+      paddingBottom: context?.client.safeAreaInsets?.bottom ?? 0,
+      paddingLeft: context?.client.safeAreaInsets?.left ?? 0,
+      paddingRight: context?.client.safeAreaInsets?.right ?? 0,
+    }}>
+      <div 
+        className="h-screen w-full flex flex-col items-center justify-center bg-black text-white"
+        onClick={handleTap}
+      >
+        {showResult ? (
+          <div className="text-center">
+            <h1 className="text-6xl font-bold mb-4 animate-pulse">
+              {hasWon ? '🎉 YOU WIN! 🎉' : 'You lose :('}
+            </h1>
+            {hasWon && (
+              <div className="text-4xl animate-bounce">
+                🎊🎊🎊
+              </div>
+            )}
+          </div>
+        ) : (
+          <h1 className="text-9xl font-bold animate-pulse">
+            {number}
+          </h1>
+        )}
+        
+        <div className="mt-4 text-sm text-gray-400">
+          {isCounting ? 'Tap to freeze!' : 'Restarting in 5 seconds...'}
+        </div>
       </div>
     </div>
   );
